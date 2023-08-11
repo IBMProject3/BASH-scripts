@@ -1,261 +1,73 @@
 #!/usr/bin/bash
 
- 
-
-if [ -f "/etc/os-release" ]
-
- 
-
-then
-
- 
-
-  source "/etc/os-release"
-
- 
-
-  echo "Operating System: $NAME"
-
- 
-
-  echo "Version: $VERSION"
-
- 
-
-        if [[ "$NAME" == *"Linux"* ]]
-
- 
-
-        then
-
- 
-
-                echo "The OS is $NAME"
-
- 
-
-                ARCH=$(arch)
-
- 
-
-                echo "The architecture is $ARCH"
-
- 
-
-                if [[ "$ARCH" == "ARM64" || "$ARCH" == "x86_64" || "$ARCH" == "ppc64" || "$ARCH" == "ARMv7" || "$ARCH" == "S390x" ]]
-
- 
-
-                then
-
- 
-
-                        curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-$ARCH
-
- 
-
-                        sudo install minikube-linux-$ARCH /usr/local/bin/minikube
-
- 
-
-                fi
-
- 
-
-                minikube start
-
- 
-
-                minikube status
-
- 
-
-                exitCode=$?
-
- 
-
-                if [ "$exitCode" != 0 ]
-
- 
-
-                then
-
- 
-
-                        echo "************minikube installation is failing*****************"
-
- 
-
-                    exit 1
-
- 
-
-                else
-
- 
-
-                        echo "***********************minikube is installed successfully*******************************************"
-
- 
-
-                fi
-
- 
-
-        fi
-
- 
-
-        if [[ "$NAME" == *"macOS"* ]]
-
- 
-
-        then
-
- 
-
-        echo "The OS is $NAME"
-
- 
-
-                ARCH=$(arch)
-
- 
-
-                echo "The architecture is $ARCH"
-
- 
-
-                if [[ "$ARCH" == "x86-64" || "$ARCH" == "ARM64" ]]
-
- 
-
-                then
-
- 
-
-                        curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-darwin-$ARCH
-
- 
-
-                        sudo install minikube-darwin-$ARCH /usr/local/bin/minikube
-
- 
-
-                 fi
-                sudo minikube start
-
- 
-
-                minikube statusexitCode=$?
-
- 
-
-                if [ "$exitCode" != 0 ]
-
- 
-
-                then
-
- 
-
-                        echo "*********minikube installation is failing***************"
-
- 
-
-                    exit 1
-
- 
-
-                else
-
- 
-
-                        echo "*******minikube is installed Successfully****"
-
- 
-
-                fi
-
- 
-
-        fi
-        if [[ "$NAME" == *"Windows"* ]]
-
- 
-
-        then
-
- 
-
-                echo "The OS is $NAME"
-
- 
-
-                ARCH=$(arch)
-
- 
-
-                echo "The architecture is $ARCH"
-
- 
-
-                if [[  "$ARCH" == "x86_64"  ]]
-
- 
-
-                then
-
-
-
-                        curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-Windows-$ARCH
-
- 
-
-                        sudo install minikube-Windows-$ARCH /usr/local/bin/minikube
-
- 
-
-                 
-                fi
-                minikube start
-
- 
-
-                minikube status
-                exitCode=$?
-
- 
-
-                if [ "$exitCode" != 0 ]
-
- 
-
-                then
-
- 
-
-                        echo "*********minikube installation is failing***************"
-
- 
-
-                        exit 1
-
- 
-
-                else
-
- 
-
-                        echo "*******minikube is installed Successfully****"
-                fi
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    key="$1"
+
+    case $key in
+        -p|--platform)
+        PLATFORM="$2"
+        shift
+        shift
+        ;;
+        -c|--command)
+        COMMAND="$2"
+        shift
+        shift
+        ;;
+        *)
+        shift
+        ;;
+    esac
+done
+
+
+# Function to deploy pods
+deploy_pods() {
+    local namespace="$1"
+
+    # Deploy pods
+    for i in {1..4}; do
+        kubectl -n "$namespace" run pod-$i --image=nginx 
+    done
+
+    # Wait for pods to be ready
+    kubectl wait --for=condition=ready pods -n "$namespace" --all
+}
+# Function to create communication between pods in different namespaces
+create_communication() {
+    local source_namespace=$1
+    local target_namespace=$2
+
+    source_pod=$(kubectl get pods -n "$source_namespace" -o=jsonpath='{.items[0].metadata.name}')
+    target_pod=$(kubectl get pods -n "$target_namespace" -o=jsonpath='{.items[0].metadata.name}')
+
+    kubectl exec -n "$source_namespace" "$source_pod" -- sh -c "curl $target_pod"
+    if [ $? -ne 0 ]; then
+        echo "Error establishing communication between pods"
+    else
+	echo "Communication established between pods"
     fi
-else
+}
+	
 
- 
+# Main script
 
-  echo "Unable to determine the operating system."
+# Create namespaces
+kubectl create namespace namespace1
+kubectl create namespace namespace2
 
- 
+# Deploy pods to namespaces
+deploy_pods namespace1
+deploy_pods namespace2
 
-fi
+# Wait for pods to be ready
+kubectl wait --for=condition=ready pods -n namespace1 --all
+kubectl wait --for=condition=ready pods -n namespace2 --all
+
+# Establish communication between pods in different namespaces
+create_communication namespace1 namespace2
+
+        echo "Communication established between pods"
+    fi
+}
